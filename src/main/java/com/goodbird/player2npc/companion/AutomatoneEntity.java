@@ -74,17 +74,20 @@ public class AutomatoneEntity extends LivingEntity
     }
 
     public void init() {
-        // We set its speed and step height
-        this.setStepHeight(0.6f);
-        setMovementSpeed(0.4f);
-        // Initialize the provided managers and such
-        manager = new LivingEntityInteractionManager(this);
-        inventory = new LivingEntityInventory(this);
-        hungerManager = new LivingEntityHungerManager();
-        // We initialize the altoclef controller ONLY ON CLIENT SIDE!
-        if (!getWorld().isClient && character != null) {
-            this.controller = new AltoClefController(IBaritone.KEY.get(this), character, PLAYER2_GAME_ID);
-            ConversationManager.sendGreeting(this.controller, character);
+        try {
+            this.setStepHeight(com.goodbird.player2npc.config.ConfigManager.getCompanionStepHeight());
+            setMovementSpeed(com.goodbird.player2npc.config.ConfigManager.getCompanionSpeed());
+
+            manager = new LivingEntityInteractionManager(this);
+            inventory = new LivingEntityInventory(this);
+            hungerManager = new LivingEntityHungerManager();
+
+            if (!getWorld().isClient && character != null) {
+                this.controller = new AltoClefController(IBaritone.KEY.get(this), character, PLAYER2_GAME_ID);
+                ConversationManager.sendGreeting(this.controller, character);
+            }
+        } catch (Exception e) {
+            Player2NPC.LOGGER.error("Error initializing AutomatoneEntity", e);
         }
     }
 
@@ -173,25 +176,29 @@ public class AutomatoneEntity extends LivingEntity
         pickupItems(); // And tick the item pickup
     }
 
-    // Pickup all the items in range of 3 blocks
     public void pickupItems() {
-        if (!this.getWorld().isClient && this.isAlive() && !this.dead
-                && this.getWorld().getGameRules().getBoolean(GameRules.DO_MOB_GRIEFING)) {
-            Vec3i vec3i = new Vec3i(3, 3, 3);
-            for (ItemEntity itemEntity : this.getWorld().getNonSpectatingEntities(ItemEntity.class, this
-                    .getBoundingBox().expand((double) vec3i.getX(), (double) vec3i.getY(), (double) vec3i.getZ()))) {
-                if (!itemEntity.isRemoved() && !itemEntity.getStack().isEmpty() && !itemEntity.cannotPickup()) {
-                    ItemStack itemStack = itemEntity.getStack();
-                    int i = itemStack.getCount();
-                    if (this.getLivingInventory().insertStack(itemStack)) {
-                        this.sendPickup(itemEntity, i);
-                        if (itemStack.isEmpty()) {
-                            itemEntity.discard();
-                            itemStack.setCount(i);
+        try {
+            if (!this.getWorld().isClient && this.isAlive() && !this.dead
+                    && this.getWorld().getGameRules().getBoolean(GameRules.DO_MOB_GRIEFING)) {
+                int pickupRange = com.goodbird.player2npc.config.ConfigManager.getItemPickupRange();
+                Vec3i vec3i = new Vec3i(pickupRange, pickupRange, pickupRange);
+
+                for (ItemEntity itemEntity : this.getWorld().getNonSpectatingEntities(ItemEntity.class, this
+                        .getBoundingBox().expand((double) vec3i.getX(), (double) vec3i.getY(), (double) vec3i.getZ()))) {
+                    if (itemEntity != null && !itemEntity.isRemoved() && !itemEntity.getStack().isEmpty() && !itemEntity.cannotPickup()) {
+                        ItemStack itemStack = itemEntity.getStack();
+                        int count = itemStack.getCount();
+                        if (this.getLivingInventory().insertStack(itemStack)) {
+                            this.sendPickup(itemEntity, count);
+                            if (itemStack.isEmpty()) {
+                                itemEntity.discard();
+                            }
                         }
                     }
                 }
             }
+        } catch (Exception e) {
+            Player2NPC.LOGGER.error("Error picking up items", e);
         }
     }
 

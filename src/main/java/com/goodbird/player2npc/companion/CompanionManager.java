@@ -71,9 +71,17 @@ public class CompanionManager implements Component, ServerTickingComponent {
     }
 
     public void ensureCompanionExists(Character character) {
-              LOGGER.info("ensureCompanionExists for character={}", character);
-        if (_player.getWorld() == null || _player.getServer() == null)
+        if (character == null) {
+            LOGGER.warn("ensureCompanionExists called with null character");
             return;
+        }
+
+        LOGGER.info("ensureCompanionExists for character={}", character.name());
+
+        if (_player.getWorld() == null || _player.getServer() == null) {
+            LOGGER.warn("Cannot summon companion: world or server is null for player {}", _player.getName().getString());
+            return;
+        }
 
         UUID companionUuid = _companionMap.get(character.name());
         ServerWorld world = _player.getServerWorld();
@@ -86,30 +94,42 @@ public class CompanionManager implements Component, ServerTickingComponent {
 
         if (existingCompanion instanceof AutomatoneEntity && existingCompanion.isAlive()) {
             existingCompanion.teleport(spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5);
-                        System.out.println("Teleported existing companion: " + character.name() + " for player " + this._player.getName().getString());
+            LOGGER.info("Teleported existing companion: {} for player {}", character.name(), _player.getName().getString());
         } else {
-            AutomatoneEntity newCompanion = new AutomatoneEntity(_player.getWorld(), character, _player);
-            newCompanion.refreshPositionAndAngles(spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5,
-                    _player.getYaw(), 0);
+            try {
+                AutomatoneEntity newCompanion = new AutomatoneEntity(_player.getWorld(), character, _player);
+                newCompanion.refreshPositionAndAngles(spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5,
+                        _player.getYaw(), 0);
 
-            world.spawnEntity(newCompanion);
-            _companionMap.put(character.name(), newCompanion.getUuid());
-            System.out.println(
-                    "Summoned new companion: " + character.name() + " for player " + _player.getName().getString());
+                world.spawnEntity(newCompanion);
+                _companionMap.put(character.name(), newCompanion.getUuid());
+                LOGGER.info("Summoned new companion: {} for player {}", character.name(), _player.getName().getString());
+            } catch (Exception e) {
+                LOGGER.error("Failed to summon companion {} for player {}", character.name(), _player.getName().getString(), e);
+            }
         }
     }
 
     public void dismissCompanion(String characterName) {
+        if (characterName == null) {
+            LOGGER.warn("dismissCompanion called with null character name");
+            return;
+        }
+
         UUID companionUuid = _companionMap.remove(characterName);
         if (companionUuid != null && _player.getServer() != null) {
-            for (ServerWorld world : _player.getServer().getWorlds()) {
-                Entity companion = world.getEntity(companionUuid);
-                if (companion instanceof AutomatoneEntity) {
-                    companion.discard();
-                    System.out.println(
-                            "Dismissed companion: " + characterName + " for player " + _player.getName().getString());
-                    return;
+            try {
+                for (ServerWorld world : _player.getServer().getWorlds()) {
+                    Entity companion = world.getEntity(companionUuid);
+                    if (companion instanceof AutomatoneEntity) {
+                        companion.discard();
+                        LOGGER.info("Dismissed companion: {} for player {}", characterName, _player.getName().getString());
+                        return;
+                    }
                 }
+                LOGGER.debug("Companion {} not found in any world", characterName);
+            } catch (Exception e) {
+                LOGGER.error("Failed to dismiss companion {}", characterName, e);
             }
         }
     }
@@ -122,18 +142,28 @@ public class CompanionManager implements Component, ServerTickingComponent {
 
     public List<AutomatoneEntity> getActiveCompanions() {
         List<AutomatoneEntity> companions = new ArrayList<>();
-        if (_player.getServer() == null)
-            return companions;
 
-        for (UUID uuid : _companionMap.values()) {
-            for (ServerWorld world : _player.getServer().getWorlds()) {
-                Entity entity = world.getEntity(uuid);
-                if (entity instanceof AutomatoneEntity companion && companion.isAlive()) {
-                    companions.add(companion);
-                    break;
+        if (_player.getServer() == null) {
+            LOGGER.debug("Cannot get active companions: server is null");
+            return companions;
+        }
+
+        try {
+            for (UUID uuid : _companionMap.values()) {
+                if (uuid == null) continue;
+
+                for (ServerWorld world : _player.getServer().getWorlds()) {
+                    Entity entity = world.getEntity(uuid);
+                    if (entity instanceof AutomatoneEntity companion && companion.isAlive()) {
+                        companions.add(companion);
+                        break;
+                    }
                 }
             }
+        } catch (Exception e) {
+            LOGGER.error("Error retrieving active companions", e);
         }
+
         return companions;
     }
 

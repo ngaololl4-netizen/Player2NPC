@@ -54,11 +54,31 @@ public class AutomatoneSpawnRequestPacket implements FabricPacket {
         return TYPE;
     }
 
-    public static void handle(MinecraftServer var1, ServerPlayerEntity var2, ServerPlayNetworkHandler var3, PacketByteBuf var4, PacketSender var5) {
-        AutomatoneSpawnRequestPacket packet = new AutomatoneSpawnRequestPacket(var4);
-        LOGGER.info("AutomatoneSpawnReqPacket C2S/ character={}", packet.character);
-        if(packet.character != null){
-            var1.execute(() -> CompanionManager.KEY.get(var2).ensureCompanionExists(packet.character));
+    public static void handle(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender sender) {
+        try {
+            AutomatoneSpawnRequestPacket packet = new AutomatoneSpawnRequestPacket(buf);
+
+            if (packet.character == null) {
+                LOGGER.warn("Invalid spawn request from player {}: null character", player.getName().getString());
+                return;
+            }
+
+            LOGGER.info("AutomatoneSpawnReqPacket from {}: character={}", player.getName().getString(), packet.character.name());
+
+            server.execute(() -> {
+                try {
+                    CompanionManager manager = CompanionManager.KEY.get(player);
+                    if (manager != null) {
+                        manager.ensureCompanionExists(packet.character);
+                    } else {
+                        LOGGER.error("CompanionManager not found for player {}", player.getName().getString());
+                    }
+                } catch (Exception e) {
+                    LOGGER.error("Error handling spawn request for player {}", player.getName().getString(), e);
+                }
+            });
+        } catch (Exception e) {
+            LOGGER.error("Error parsing spawn request packet", e);
         }
     }
 }
